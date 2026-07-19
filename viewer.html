@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote Browser Viewer</title>
+<style>
+  body { margin:0; background:#111; font-family: sans-serif; display:flex; flex-direction:column; align-items:center; }
+  #status { color:#0f0; font-size:11px; padding:6px; }
+  #screenImg { width:100%; max-width:480px; border:2px solid #333; cursor:pointer; display:block; }
+  #controls { display:flex; gap:8px; padding:10px; width:100%; max-width:480px; box-sizing:border-box; }
+  #textInput { flex:1; padding:8px; }
+  button { padding:8px 14px; }
+</style>
+</head>
+<body>
+<div id="status">Connecting...</div>
+<img id="screenImg" src="" alt="Remote browser">
+<div id="controls">
+  <input id="textInput" placeholder="Yahan type karo, phir 'Send' dabao">
+  <button onclick="sendType()">Send</button>
+  <button onclick="sendKey('Tab')">Tab</button>
+  <button onclick="sendKey('Enter')">Enter</button>
+</div>
+
+<script>
+const API = '';
+const img = document.getElementById('screenImg');
+const status = document.getElementById('status');
+let refreshCount = 0;
+
+async function refreshScreenshot() {
+  try {
+    const res = await fetch(API + '/screenshot?t=' + Date.now());
+    if (!res.ok) { status.textContent = 'Error: browser session nahi mili'; return; }
+    const blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+    refreshCount++;
+    status.textContent = 'Live — ' + refreshCount + ' frames dikhaye gaye';
+  } catch (e) {
+    status.textContent = 'Connection error: ' + e.message;
+  }
+}
+
+// Har 800ms mein naya screenshot lo — yeh "streaming" ka core mechanism hai
+setInterval(refreshScreenshot, 800);
+refreshScreenshot();
+
+// Jab user image pe tap kare, us position ko real browser coordinates mein convert karke click bhejo
+img.addEventListener('click', async (e) => {
+  const rect = img.getBoundingClientRect();
+  const scaleX = 480 / rect.width;   // real browser viewport width / displayed width
+  const scaleY = 800 / rect.height;
+  const x = Math.round((e.clientX - rect.left) * scaleX);
+  const y = Math.round((e.clientY - rect.top) * scaleY);
+  await fetch(API + '/click', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ x, y }) });
+  setTimeout(refreshScreenshot, 200);
+});
+
+async function sendType() {
+  const text = document.getElementById('textInput').value;
+  if (!text) return;
+  await fetch(API + '/type', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
+  document.getElementById('textInput').value = '';
+  setTimeout(refreshScreenshot, 200);
+}
+async function sendKey(key) {
+  await fetch(API + '/key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key }) });
+  setTimeout(refreshScreenshot, 200);
+}
+</script>
+</body>
+</html>
